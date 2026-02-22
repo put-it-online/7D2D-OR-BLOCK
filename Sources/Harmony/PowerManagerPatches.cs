@@ -6,26 +6,26 @@ using System.Collections.Generic;
 // ---------------------------------------------------------------------------
 /// <summary>
 /// Prevents the ArgumentException "An item with the same key has already been
-/// added" that occurs during world load when a PowerItemORGate is listed in the
+/// added" that occurs during world load when a PowerItemLogicRelay is listed in the
 /// Children of BOTH its parents in the save file.
 ///
-/// Root cause: when a second parent is wired, the gate is added to that
+/// Root cause: when a second parent is wired, the Logic Relay is added to that
 /// parent's Children list so vanilla wire-drawing code works. On save,
-/// PowerItem.write serialises every entry in Children, so the OR gate appears
+/// PowerItem.write serialises every entry in Children, so the Logic Relay appears
 /// under two different parent nodes. On load, each parent calls
-/// PowerManager.AddPowerNode for the OR gate; the first call succeeds, the
+/// PowerManager.AddPowerNode for the Logic Relay; the first call succeeds, the
 /// second throws because the position key is already in PowerItemDictionary.
 ///
 /// Fix: if the position is already registered, skip the duplicate AddPowerNode
 /// entirely. Do NOT add the duplicate node to the parent's Children list —
 /// the parent-child links are repaired later by CheckForNewWires() (which runs
 /// in TileEntityPowered.OnReadComplete after InitializePowerData creates the
-/// real PowerItemORGate) and by RestoreSecondParent() in the LoadPowerManager
+/// real PowerItemLogicRelay) and by RestoreSecondParent() in the LoadPowerManager
 /// Postfix below.
 ///
 /// Previous behaviour (adding the existing node to the duplicate's parent)
 /// caused phantom entries in parent Children lists, which in turn blocked
-/// CheckForNewWires from re-linking the real gate.
+/// CheckForNewWires from re-linking the real Logic Relay.
 /// </summary>
 [HarmonyPatch(typeof(PowerManager), "AddPowerNode")]
 public class PowerManager_AddPowerNode_Patch
@@ -41,7 +41,7 @@ public class PowerManager_AddPowerNode_Patch
         // Duplicate: position already registered.
         // Skip entirely. Do NOT touch Children lists here — the real links are
         // established by CheckForNewWires / RestoreSecondParent after load.
-        Log.Out("[ORBlock] AddPowerNode: skipping duplicate at " + node.Position);
+        Log.Out("[LogicRelay] AddPowerNode: skipping duplicate at " + node.Position);
         return false;
     }
 }
@@ -52,11 +52,11 @@ public class PowerManager_AddPowerNode_Patch
 /// <summary>
 /// Two responsibilities:
 ///
-/// 1. Allows a PowerItemORGate to accept a second parent without replacing the
+/// 1. Allows a PowerItemLogicRelay to accept a second parent without replacing the
 ///    first. Vanilla SetParent would overwrite the existing parent; this prefix
-///    intercepts that for OR-gate nodes and routes to SetSecondParent instead.
+///    intercepts that for Logic Relay nodes and routes to SetSecondParent instead.
 ///
-/// 2. Phantom-node guard: during power.dat loading, when a duplicate OR gate
+/// 2. Phantom-node guard: during power.dat loading, when a duplicate Logic Relay
 ///    occurrence (pc2) is read by PowerItem.read(), pc2's base.read() calls
 ///    SetParent(pc2, primaryParent) BEFORE our AddPowerNode patch can see it.
 ///    This inserts pc2 into the primary parent's Children list as a phantom node.
@@ -79,33 +79,33 @@ public class PowerManager_SetParent_Patch
             PowerItem existing = PowerManager.Instance.GetPowerItemByWorldPos(child.Position);
             if (existing != null && existing != child)
             {
-                Log.Out("[ORBlock] SetParent: blocking phantom SetParent for node at "
+                Log.Out("[LogicRelay] SetParent: blocking phantom SetParent for node at "
                     + child.Position + " (real node already registered)");
                 return false; // skip — would insert a phantom into parent.Children
             }
         }
 
-        // --- Second-parent support for PowerItemORGate ---
-        if (child is PowerItemORGate orGate)
+        // --- Second-parent support for PowerItemLogicRelay ---
+        if (child is PowerItemLogicRelay logicRelay)
         {
             // No first parent yet — let vanilla handle it (sets Parent).
-            if (orGate.Parent == null)
+            if (logicRelay.Parent == null)
                 return true;
 
             // Same parent wired again — nothing to do.
-            if (orGate.Parent == parent)
+            if (logicRelay.Parent == parent)
                 return false;
 
             // A second (or replacement) parent is being assigned.
             if (parent != null)
             {
-                if (orGate.SecondParent != null)
-                    orGate.RemoveSecondParent();
+                if (logicRelay.SecondParent != null)
+                    logicRelay.RemoveSecondParent();
 
-                orGate.SetSecondParent(parent);
+                logicRelay.SetSecondParent(parent);
 
-                if (!parent.Children.Contains(orGate))
-                    parent.Children.Add(orGate);
+                if (!parent.Children.Contains(logicRelay))
+                    parent.Children.Add(logicRelay);
 
                 return false;
             }
@@ -116,11 +116,11 @@ public class PowerManager_SetParent_Patch
 }
 
 // ---------------------------------------------------------------------------
-// PowerItem.IsPowered — OR / AND gate logic
+// PowerItem.IsPowered — OR / AND Logic Relay logic
 // ---------------------------------------------------------------------------
 /// <summary>
-/// Overrides IsPowered for PowerItemORGate so that output power is determined
-/// by the gate's current OR/AND logic across both parent inputs.
+/// Overrides IsPowered for PowerItemLogicRelay so that output power is determined
+/// by the relay's current OR/AND logic across both parent inputs.
 /// </summary>
 [HarmonyPatch(typeof(PowerItem))]
 [HarmonyPatch("get_IsPowered")]
@@ -128,9 +128,9 @@ public class PowerItem_IsPowered_Patch
 {
     static bool Prefix(PowerItem __instance, ref bool __result)
     {
-        if (__instance is PowerItemORGate orGate)
+        if (__instance is PowerItemLogicRelay logicRelay)
         {
-            __result = orGate.IsOutputPowered();
+            __result = logicRelay.IsOutputPowered();
             return false;
         }
         return true;
@@ -142,17 +142,17 @@ public class PowerItem_IsPowered_Patch
 // ---------------------------------------------------------------------------
 /// <summary>
 /// After the power save-file has been fully deserialised, iterates every
-/// loaded power item and calls RestoreSecondParent() on any PowerItemORGate.
+/// loaded power item and calls RestoreSecondParent() on any PowerItemLogicRelay.
 ///
 /// At this point in the game startup sequence, TileEntities have not yet
 /// initialised (chunks load after this). The PowerItemDictionary only contains
-/// plain PowerConsumer objects at this point — actual PowerItemORGate objects
+/// plain PowerConsumer objects at this point — actual PowerItemLogicRelay objects
 /// are created later in TileEntityPowered_InitializePowerData_Patch when
 /// each chunk's TileEntities initialise.
 ///
-/// Therefore this Postfix serves as a safety net for any gate that was already
-/// upgraded before this runs (e.g. in a future code path), but is not the
-/// primary restore mechanism. The primary mechanism is ApplyMetadata() in
+/// Therefore this Postfix serves as a safety net for any Logic Relay that was
+/// already upgraded before this runs (e.g. in a future code path), but is not
+/// the primary restore mechanism. The primary mechanism is ApplyMetadata() in
 /// TileEntityPowered_InitializePowerData_Patch.
 /// </summary>
 [HarmonyPatch(typeof(PowerManager))]
@@ -164,15 +164,15 @@ public class PowerManager_LoadPowerManager_Patch
         int restored = 0;
         foreach (var kvp in __instance.PowerItemDictionary)
         {
-            if (kvp.Value is PowerItemORGate orGate)
+            if (kvp.Value is PowerItemLogicRelay logicRelay)
             {
-                orGate.RestoreSecondParent();
+                logicRelay.RestoreSecondParent();
                 restored++;
             }
         }
         if (restored > 0)
         {
-            Log.Out("[ORBlock] LoadPowerManager: restored " + restored
+            Log.Out("[LogicRelay] LoadPowerManager: restored " + restored
                 + " Logic Relay second-parent connection(s).");
         }
     }

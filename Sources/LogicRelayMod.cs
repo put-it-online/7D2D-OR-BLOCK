@@ -1,6 +1,6 @@
 using HarmonyLib;
 
-public class ORBlockMod : IModApi
+public class LogicRelayMod : IModApi
 {
     public void InitMod(Mod _modInstance)
     {
@@ -8,8 +8,8 @@ public class ORBlockMod : IModApi
         // automatically, so no individual patch class needs to be listed here.
         // The previous approach of listing patches explicitly missed the
         // TileEntity and PowerManager patch classes entirely.
-        var harmony = new Harmony("com.wimput.orblock");
+        var harmony = new Harmony("com.wimput.logicrelay");
         harmony.PatchAll();
-        Log.Out("[ORBlock] Logic Relay Block mod loaded — all patches applied.");
+        Log.Out("[LogicRelay] Logic Relay Block mod loaded — all patches applied.");
     }
 }

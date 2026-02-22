@@ -1,13 +1,13 @@
 using System.IO;
 using UnityEngine;
 
-public enum GateMode : byte
+public enum LogicRelayMode : byte
 {
     OR = 0,
     AND = 1
 }
 
-public class PowerItemORGate : PowerConsumer
+public class PowerItemLogicRelay : PowerConsumer
 {
     // The second input connection (vanilla only supports one parent)
     public PowerItem SecondParent { get; set; }
@@ -20,8 +20,8 @@ public class PowerItemORGate : PowerConsumer
     public Vector3i SecondParentPosition { get; set; } = Vector3i.zero;
     public bool HasSecondParent { get; set; } = false;
 
-    // Gate mode: OR (default) or AND
-    public GateMode Mode { get; set; } = GateMode.OR;
+    // Logic Relay mode: OR (default) or AND
+    public LogicRelayMode Mode { get; set; } = LogicRelayMode.OR;
 
     /// <summary>
     /// Returns true if a given parent input is "on" for gate logic purposes.
@@ -44,7 +44,7 @@ public class PowerItemORGate : PowerConsumer
     }
 
     /// <summary>
-    /// Check if the gate output should be powered, based on current mode.
+    /// Check if the Logic Relay output should be powered, based on current mode.
     /// Uses IsActive for trigger-type parents so that AND mode correctly requires
     /// BOTH triggers to be active, not just both receiving electricity.
     /// </summary>
@@ -53,7 +53,7 @@ public class PowerItemORGate : PowerConsumer
         bool parent1Active = IsParentActive(Parent);
         bool parent2Active = IsParentActive(SecondParent);
 
-        if (Mode == GateMode.AND)
+        if (Mode == LogicRelayMode.AND)
         {
             // AND: both inputs must be connected AND active
             return Parent != null && parent1Active
@@ -65,7 +65,7 @@ public class PowerItemORGate : PowerConsumer
     }
 
     /// <summary>
-    /// Override HandlePowerUpdate to apply gate logic directly.
+    /// Override HandlePowerUpdate to apply Logic Relay logic directly.
     ///
     /// The base PowerConsumer.HandlePowerUpdate does:
     ///   bool flag = isPowered && isOn;
@@ -76,13 +76,13 @@ public class PowerItemORGate : PowerConsumer
     /// We must override this entirely to use IsOutputPowered() as the activation flag.
     ///
     /// We also must control child propagation: in AND mode, children should only
-    /// receive HandlePowerUpdate(true) when the gate output is on.
+    /// receive HandlePowerUpdate(true) when the Logic Relay output is on.
     /// </summary>
     public override void HandlePowerUpdate(bool isOn)
     {
         bool outputOn = isOn && IsOutputPowered();
 
-        Log.Out("[ORBlock] HandlePowerUpdate: mode=" + Mode
+        Log.Out("[LogicRelay] HandlePowerUpdate: mode=" + Mode
             + " parent1Active=" + IsParentActive(Parent)
             + " parent2Active=" + IsParentActive(SecondParent)
             + " isPowered=" + isPowered
@@ -100,7 +100,7 @@ public class PowerItemORGate : PowerConsumer
         }
         lastActivate = outputOn;
 
-        // Propagate to children with the gate output state
+        // Propagate to children with the Logic Relay output state
         for (int i = 0; i < Children.Count; i++)
         {
             Children[i].HandlePowerUpdate(outputOn);
@@ -123,7 +123,7 @@ public class PowerItemORGate : PowerConsumer
     /// </summary>
     public void ToggleMode()
     {
-        Mode = (Mode == GateMode.OR) ? GateMode.AND : GateMode.OR;
+        Mode = (Mode == LogicRelayMode.OR) ? LogicRelayMode.AND : LogicRelayMode.OR;
         SendHasLocalChangesToRoot();
     }
 
@@ -213,8 +213,8 @@ public class PowerItemORGate : PowerConsumer
     /// Do NOT write any extra bytes (secondParentPosition, mode) after base.write().
     ///
     /// Root cause of the NullReferenceException crash (fixed here):
-    ///   When an OR gate is connected to two parents, vanilla PowerItem.write()
-    ///   serialises the gate into BOTH parents' Children lists in power.dat.
+    ///   When a Logic Relay is connected to two parents, vanilla PowerItem.write()
+    ///   serialises the relay into BOTH parents' Children lists in power.dat.
     ///   On load, the second occurrence is read by CreateItem(Consumer) which
     ///   creates a plain PowerConsumer. PowerConsumer.read() only reads base bytes
     ///   and returns — leaving any extra bytes we wrote unconsumed in the stream.
@@ -226,7 +226,7 @@ public class PowerItemORGate : PowerConsumer
     ///   then called set_IsTriggered, which cast PowerItem to PowerPressurePlate,
     ///   got null, and threw a NullReferenceException every frame.
     ///
-    /// The OR gate metadata (secondParentPosition, mode) is now persisted
+    /// The Logic Relay metadata (secondParentPosition, mode) is now persisted
     /// exclusively through TileEntityPowered chunk data via
     /// TileEntityPowered_ReadWrite_Patch in TileEntityPatches.cs.
     /// </summary>
@@ -238,7 +238,7 @@ public class PowerItemORGate : PowerConsumer
 
     /// <summary>
     /// Deserialize from power.dat.
-    /// Only reads base PowerConsumer data; extra OR gate data is loaded
+    /// Only reads base PowerConsumer data; extra Logic Relay data is loaded
     /// from TileEntity chunk data in TileEntityPowered_ReadWrite_Patch.
     /// </summary>
     public override void read(BinaryReader _br, byte _version)
@@ -265,7 +265,7 @@ public class PowerItemORGate : PowerConsumer
         }
         else
         {
-            Log.Warning("[ORBlock] Could not restore second parent at " + SecondParentPosition);
+            Log.Warning("[LogicRelay] Could not restore second parent at " + SecondParentPosition);
             HasSecondParent = false;
             SecondParentPosition = Vector3i.zero;
         }

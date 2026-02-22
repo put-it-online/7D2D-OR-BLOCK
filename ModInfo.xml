@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <xml>
-    <Name value="ORBlock" />
+    <Name value="LogicRelay" />
     <DisplayName value="Logic Relay Block" />
     <Version value="2.0.0" />
     <Description value="Adds a Logic Relay electrical block with 2 inputs and selectable OR/AND mode" />

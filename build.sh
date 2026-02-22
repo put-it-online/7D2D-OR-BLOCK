@@ -11,12 +11,12 @@ else
     exit 1
 fi
 
-echo "Building ORBlock mod..."
-"$DOTNET" restore ORBlock.csproj --source https://api.nuget.org/v3/index.json
-"$DOTNET" build ORBlock.csproj -c Release --no-restore
+echo "Building LogicRelay mod..."
+"$DOTNET" restore LogicRelay.csproj --source https://api.nuget.org/v3/index.json
+"$DOTNET" build LogicRelay.csproj -c Release --no-restore
 
 # Copy compiled DLL to mod root (where 7D2D expects it)
-cp bin/ORBlock.dll ./ORBlock.dll
+cp bin/LogicRelay.dll ./LogicRelay.dll
 echo "DLL copied to mod root."
 
 # Verify 0_TFP_Harmony is in Mods/ — it provides 0Harmony.dll at runtime.
@@ -41,7 +41,7 @@ else
 fi
 
 echo ""
-echo "Build complete! ORBlock.dll ready."
+echo "Build complete! LogicRelay.dll ready."
 echo "Mods folder contents:"
 ls -1 "$GAME_ROOT/Mods/"
 echo ""

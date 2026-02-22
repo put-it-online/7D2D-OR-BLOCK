@@ -2,8 +2,8 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <OutputType>Library</OutputType>
-    <RootNamespace>ORBlock</RootNamespace>
-    <AssemblyName>ORBlock</AssemblyName>
+    <RootNamespace>LogicRelay</RootNamespace>
+    <AssemblyName>LogicRelay</AssemblyName>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <OutputPath>bin/</OutputPath>

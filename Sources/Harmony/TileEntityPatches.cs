@@ -2,24 +2,24 @@ using HarmonyLib;
 using System.Collections.Generic;
 
 // ---------------------------------------------------------------------------
-// OR gate metadata store
+// Logic Relay metadata store
 // ---------------------------------------------------------------------------
 /// <summary>
-/// Holds OR gate metadata (secondParentPosition, hasSecondParent, mode) that
+/// Holds Logic Relay metadata (secondParentPosition, hasSecondParent, mode) that
 /// is read from TileEntity chunk data before InitializePowerData runs.
 /// Keyed by world position of the Logic Relay TileEntity.
 /// </summary>
-public static class ORGateMetadataStore
+public static class LogicRelayMetadataStore
 {
-    private static readonly Dictionary<Vector3i, ORGateMetadata> _store
-        = new Dictionary<Vector3i, ORGateMetadata>();
+    private static readonly Dictionary<Vector3i, LogicRelayMetadata> _store
+        = new Dictionary<Vector3i, LogicRelayMetadata>();
 
-    public static void Store(Vector3i pos, ORGateMetadata meta)
+    public static void Store(Vector3i pos, LogicRelayMetadata meta)
     {
         _store[pos] = meta;
     }
 
-    public static bool TryGet(Vector3i pos, out ORGateMetadata meta)
+    public static bool TryGet(Vector3i pos, out LogicRelayMetadata meta)
     {
         return _store.TryGetValue(pos, out meta);
     }
@@ -30,26 +30,26 @@ public static class ORGateMetadataStore
     }
 }
 
-public struct ORGateMetadata
+public struct LogicRelayMetadata
 {
     public bool HasSecondParent;
     public Vector3i SecondParentPosition;
-    public GateMode Mode;
+    public LogicRelayMode Mode;
     public bool HasPrimaryParent;
     public Vector3i PrimaryParentPosition;
 }
 
 // ---------------------------------------------------------------------------
-// TileEntityPowered.write() — persist OR gate metadata in chunk data
+// TileEntityPowered.write() — persist Logic Relay metadata in chunk data
 // ---------------------------------------------------------------------------
 /// <summary>
-/// Appends OR gate metadata (hasSecondParent flag, secondParentPosition, mode)
+/// Appends Logic Relay metadata (hasSecondParent flag, secondParentPosition, mode)
 /// after the normal TileEntityPowered write for Logic Relay blocks.
 ///
-/// This is the only place OR gate extra data is persisted. The power.dat file
-/// (power item serialization) intentionally carries NO extra OR gate bytes —
+/// This is the only place Logic Relay extra data is persisted. The power.dat file
+/// (power item serialization) intentionally carries NO extra Logic Relay bytes —
 /// writing extra bytes there caused stream corruption because PowerConsumer.read()
-/// (which handles the gate's second duplicate occurrence during load) only reads
+/// (which handles the relay's second duplicate occurrence during load) only reads
 /// the base fields and leaves any extra bytes unconsumed, corrupting all
 /// subsequent power item reads.
 /// </summary>
@@ -71,52 +71,52 @@ public class TileEntityPowered_Write_Patch
             block.Properties.Values["IsLogicRelay"] != "true")
             return;
 
-        // Find the PowerItemORGate for this position
+        // Find the PowerItemLogicRelay for this position
         PowerItem powerItem = PowerManager.Instance.GetPowerItemByWorldPos(__instance.ToWorldPos());
-        if (powerItem is PowerItemORGate orGate)
+        if (powerItem is PowerItemLogicRelay logicRelay)
         {
-            _bw.Write(orGate.HasSecondParent);
-            if (orGate.HasSecondParent)
+            _bw.Write(logicRelay.HasSecondParent);
+            if (logicRelay.HasSecondParent)
             {
-                _bw.Write(orGate.SecondParentPosition.x);
-                _bw.Write(orGate.SecondParentPosition.y);
-                _bw.Write(orGate.SecondParentPosition.z);
+                _bw.Write(logicRelay.SecondParentPosition.x);
+                _bw.Write(logicRelay.SecondParentPosition.y);
+                _bw.Write(logicRelay.SecondParentPosition.z);
             }
-            _bw.Write((byte)orGate.Mode);
+            _bw.Write((byte)logicRelay.Mode);
 
             // Primary parent position (new field — appended after existing fields)
-            bool hasPrimaryParent = orGate.Parent != null;
+            bool hasPrimaryParent = logicRelay.Parent != null;
             _bw.Write(hasPrimaryParent);
             if (hasPrimaryParent)
             {
-                _bw.Write(orGate.Parent.Position.x);
-                _bw.Write(orGate.Parent.Position.y);
-                _bw.Write(orGate.Parent.Position.z);
+                _bw.Write(logicRelay.Parent.Position.x);
+                _bw.Write(logicRelay.Parent.Position.y);
+                _bw.Write(logicRelay.Parent.Position.z);
             }
 
-            Log.Out("[ORBlock] TileEntityPowered.write: saved ORGate metadata at "
+            Log.Out("[LogicRelay] TileEntityPowered.write: saved Logic Relay metadata at "
                 + __instance.ToWorldPos()
-                + " hasSecondParent=" + orGate.HasSecondParent
-                + " mode=" + orGate.Mode);
+                + " hasSecondParent=" + logicRelay.HasSecondParent
+                + " mode=" + logicRelay.Mode);
         }
         else
         {
-            // No OR gate yet (e.g. gate not yet wired) — write defaults so
+            // No Logic Relay yet (e.g. relay not yet wired) — write defaults so
             // the read side can always consume the same number of bytes.
             _bw.Write(false); // hasSecondParent
-            _bw.Write((byte)GateMode.OR); // mode
+            _bw.Write((byte)LogicRelayMode.OR); // mode
             _bw.Write(false); // hasPrimaryParent (new field default)
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// TileEntityPowered.read() — restore OR gate metadata from chunk data
+// TileEntityPowered.read() — restore Logic Relay metadata from chunk data
 // ---------------------------------------------------------------------------
 /// <summary>
-/// Reads the OR gate metadata that was appended by TileEntityPowered_Write_Patch
-/// and stores it in ORGateMetadataStore so that InitializePowerData can apply
-/// it when creating the PowerItemORGate.
+/// Reads the Logic Relay metadata that was appended by TileEntityPowered_Write_Patch
+/// and stores it in LogicRelayMetadataStore so that InitializePowerData can apply
+/// it when creating the PowerItemLogicRelay.
 /// </summary>
 [HarmonyPatch(typeof(TileEntityPowered))]
 [HarmonyPatch("read")]
@@ -137,7 +137,7 @@ public class TileEntityPowered_Read_Patch
             return;
 
         // Guard: check there are enough bytes left to read our metadata.
-        // Old saves without OR gate metadata will have no extra bytes here.
+        // Old saves without Logic Relay metadata will have no extra bytes here.
         try
         {
             bool hasSecondParent = _br.ReadBoolean();
@@ -149,7 +149,7 @@ public class TileEntityPowered_Read_Patch
                 int z = _br.ReadInt32();
                 secondParentPos = new Vector3i(x, y, z);
             }
-            GateMode mode = (GateMode)_br.ReadByte();
+            LogicRelayMode mode = (LogicRelayMode)_br.ReadByte();
 
             // New fields — nested try-catch for backward compatibility with old saves
             bool hasPrimaryParent = false;
@@ -171,7 +171,7 @@ public class TileEntityPowered_Read_Patch
             }
 
             Vector3i worldPos = __instance.ToWorldPos();
-            ORGateMetadataStore.Store(worldPos, new ORGateMetadata
+            LogicRelayMetadataStore.Store(worldPos, new LogicRelayMetadata
             {
                 HasSecondParent = hasSecondParent,
                 SecondParentPosition = secondParentPos,
@@ -180,7 +180,7 @@ public class TileEntityPowered_Read_Patch
                 PrimaryParentPosition = primaryParentPos
             });
 
-            Log.Out("[ORBlock] TileEntityPowered.read: loaded ORGate metadata at "
+            Log.Out("[LogicRelay] TileEntityPowered.read: loaded Logic Relay metadata at "
                 + worldPos
                 + " hasSecondParent=" + hasSecondParent
                 + " hasPrimaryParent=" + hasPrimaryParent
@@ -188,32 +188,32 @@ public class TileEntityPowered_Read_Patch
         }
         catch
         {
-            // Old save format without OR gate metadata — ignore gracefully.
-            // The gate will have default values (no second parent, OR mode).
-            Log.Out("[ORBlock] TileEntityPowered.read: no ORGate metadata found (old save?) at "
+            // Old save format without Logic Relay metadata — ignore gracefully.
+            // The relay will have default values (no second parent, OR mode).
+            Log.Out("[LogicRelay] TileEntityPowered.read: no Logic Relay metadata found (old save?) at "
                 + __instance.ToWorldPos());
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// TileEntityPowered.InitializePowerData() — create PowerItemORGate for Logic Relay
+// TileEntityPowered.InitializePowerData() — create PowerItemLogicRelay for Logic Relay
 // ---------------------------------------------------------------------------
 /// <summary>
-/// Patch TileEntityPowered.InitializePowerData() to create PowerItemORGate
+/// Patch TileEntityPowered.InitializePowerData() to create PowerItemLogicRelay
 /// for our Logic Relay block instead of the default PowerConsumer.
 ///
 /// This Postfix runs after the vanilla method has already set PowerItem to the
 /// node loaded from power.dat (or created a fresh one). If the block is a
-/// Logic Relay and the current PowerItem is not yet a PowerItemORGate, we:
+/// Logic Relay and the current PowerItem is not yet a PowerItemLogicRelay, we:
 ///   1. Remove the stale power node (plain PowerConsumer from power.dat)
 ///   2. Clean up any phantom duplicate nodes left in parent Children lists
 ///      (artefacts from the second duplicate read during power.dat loading)
-///   3. Create a fresh PowerItemORGate and register it
-///   4. Apply secondParent + mode metadata from ORGateMetadataStore
+///   3. Create a fresh PowerItemLogicRelay and register it
+///   4. Apply secondParent + mode metadata from LogicRelayMetadataStore
 ///      (populated by TileEntityPowered_Read_Patch from chunk data)
 ///
-/// The second-parent restoration from ORGateMetadataStore must happen AFTER
+/// The second-parent restoration from LogicRelayMetadataStore must happen AFTER
 /// all TileEntities initialize (so the target parent's PowerItem exists).
 /// RestoreSecondParent() is called from PowerManager_LoadPowerManager_Patch
 /// Postfix, which runs after the power graph is fully loaded. However, for
@@ -233,7 +233,7 @@ public class TileEntityPowered_InitializePowerData_Patch
         // Migration guard: fix corrupted PowerTrigger.TriggerType
         // ---------------------------------------------------------------
         // OLD saves have extra bytes in power.dat written by the previous
-        // PowerItemORGate.write() (secondParentPosition + mode). These are
+        // PowerItemLogicRelay.write() (secondParentPosition + mode). These are
         // not consumed by PowerConsumer.read(), leaving stale bytes in the
         // stream that corrupt the TriggerType field of subsequent
         // PowerTrigger objects (e.g. motion detectors).
@@ -256,7 +256,7 @@ public class TileEntityPowered_InitializePowerData_Patch
             if (triggerTE.PowerItem is PowerTrigger pt
                 && pt.TriggerType != triggerTE.TriggerType)
             {
-                Log.Out("[ORBlock] InitializePowerData: correcting corrupted TriggerType at "
+                Log.Out("[LogicRelay] InitializePowerData: correcting corrupted TriggerType at "
                     + __instance.ToWorldPos()
                     + " from " + pt.TriggerType
                     + " to " + triggerTE.TriggerType
@@ -272,26 +272,26 @@ public class TileEntityPowered_InitializePowerData_Patch
 
         if (__instance.PowerItem == null)
         {
-            Log.Out("[ORBlock] InitializePowerData: PowerItem is null for Logic Relay at "
+            Log.Out("[LogicRelay] InitializePowerData: PowerItem is null for Logic Relay at "
                 + __instance.ToWorldPos() + " — skipping (not server?)");
             return;
         }
 
-        if (__instance.PowerItem is PowerItemORGate)
+        if (__instance.PowerItem is PowerItemLogicRelay)
         {
             // Already upgraded — just ensure metadata is applied
-            ApplyMetadata((PowerItemORGate)__instance.PowerItem, __instance.ToWorldPos());
+            ApplyMetadata((PowerItemLogicRelay)__instance.PowerItem, __instance.ToWorldPos());
             return;
         }
 
         // The PowerItem is a plain PowerConsumer (loaded from power.dat).
-        // Replace it with a PowerItemORGate.
+        // Replace it with a PowerItemLogicRelay.
 
         PowerItem oldItem = __instance.PowerItem;
         Vector3i gatePos = __instance.ToWorldPos();
         PowerItem originalParent = oldItem.Parent;  // capture before RemovePowerNode destroys it
 
-        Log.Out("[ORBlock] InitializePowerData: upgrading PowerConsumer to PowerItemORGate at "
+        Log.Out("[LogicRelay] InitializePowerData: upgrading PowerConsumer to PowerItemLogicRelay at "
             + gatePos);
 
         // Step 1: Collect children from the old item so we can re-attach them.
@@ -309,28 +309,29 @@ public class TileEntityPowered_InitializePowerData_Patch
         // Step 3: Clean up phantom duplicate nodes that may have been added to
         // parent Children lists during the power.dat double-read.
         //
-        // When the OR gate is serialized under TWO parents in power.dat, the second
-        // occurrence is read as a fresh PowerConsumer (pc2). Before our AddPowerNode
-        // patch can fire, PowerItem.read() calls SetParent(pc2, primaryParent) which
-        // adds pc2 to primaryParent.Children. After our Postfix removes pc1 (the first
-        // occurrence via RemovePowerNode), pc2 remains in primaryParent.Children.
-        // This phantom blocks CheckForNewWires from re-linking the real orGate.
+        // When the Logic Relay is serialized under TWO parents in power.dat, the
+        // second occurrence is read as a fresh PowerConsumer (pc2). Before our
+        // AddPowerNode patch can fire, PowerItem.read() calls SetParent(pc2,
+        // primaryParent) which adds pc2 to primaryParent.Children. After our
+        // Postfix removes pc1 (the first occurrence via RemovePowerNode), pc2
+        // remains in primaryParent.Children. This phantom blocks CheckForNewWires
+        // from re-linking the real logicRelay.
         //
         // We purge all nodes at gatePos from every power item's Children list.
         CleanPhantomChildren(gatePos);
 
-        // Step 4: Create and register the PowerItemORGate.
-        PowerItemORGate orGate = new PowerItemORGate();
-        orGate.Position = gatePos;
-        orGate.BlockID = oldItem.BlockID;
+        // Step 4: Create and register the PowerItemLogicRelay.
+        PowerItemLogicRelay logicRelay = new PowerItemLogicRelay();
+        logicRelay.Position = gatePos;
+        logicRelay.BlockID = oldItem.BlockID;
 
-        __instance.PowerItem = orGate;
-        orGate.TileEntity = __instance;
+        __instance.PowerItem = logicRelay;
+        logicRelay.TileEntity = __instance;
 
-        PowerManager.Instance.AddPowerNode(orGate);
+        PowerManager.Instance.AddPowerNode(logicRelay);
 
         // Step 5: Re-attach children that were under the old item.
-        // RemovePowerNode orphaned them into Circuits. We set orGate as their parent.
+        // RemovePowerNode orphaned them into Circuits. We set logicRelay as their parent.
         foreach (PowerItem child in childrenToKeep)
         {
             // Only re-attach if the child is still in the system and not already
@@ -338,20 +339,20 @@ public class TileEntityPowered_InitializePowerData_Patch
             if (PowerManager.Instance.GetPowerItemByWorldPos(child.Position) != null
                 && child.Parent == null)
             {
-                PowerManager.Instance.SetParent(child, orGate);
+                PowerManager.Instance.SetParent(child, logicRelay);
             }
         }
 
-        // Rebuild the gate's own wireDataList for child wires (e.g., gate -> speaker)
-        RebuildParentWires(orGate, "gate children");
+        // Rebuild the relay's own wireDataList for child wires (e.g., relay -> speaker)
+        RebuildParentWires(logicRelay, "relay children");
 
-        // Step 6: Apply OR gate metadata (secondParent, mode) from chunk save data.
+        // Step 6: Apply Logic Relay metadata (secondParent, mode) from chunk save data.
         // Pass originalParent as fallback for old saves that lack stored primary parent position.
-        ApplyMetadata(orGate, gatePos, originalParent);
+        ApplyMetadata(logicRelay, gatePos, originalParent);
 
-        Log.Out("[ORBlock] InitializePowerData: PowerItemORGate created at " + gatePos
-            + " mode=" + orGate.Mode
-            + " hasSecondParent=" + orGate.HasSecondParent);
+        Log.Out("[LogicRelay] InitializePowerData: PowerItemLogicRelay created at " + gatePos
+            + " mode=" + logicRelay.Mode
+            + " hasSecondParent=" + logicRelay.HasSecondParent);
     }
 
     /// <summary>
@@ -378,7 +379,7 @@ public class TileEntityPowered_InitializePowerData_Patch
                 if (child.Position == gatePos && child != realNode)
                 {
                     item.Children.RemoveAt(i);
-                    Log.Out("[ORBlock] CleanPhantomChildren: removed phantom child at "
+                    Log.Out("[LogicRelay] CleanPhantomChildren: removed phantom child at "
                         + gatePos + " from parent at " + kvp.Key);
                 }
             }
@@ -387,7 +388,7 @@ public class TileEntityPowered_InitializePowerData_Patch
 
     /// <summary>
     /// Rebuilds wire visuals on a parent's TileEntity after its Children list changed.
-    /// This ensures the visual wire from parent to gate is drawn after load.
+    /// This ensures the visual wire from parent to Logic Relay is drawn after load.
     /// </summary>
     private static void RebuildParentWires(PowerItem parent, string label)
     {
@@ -399,25 +400,26 @@ public class TileEntityPowered_InitializePowerData_Patch
         parentTE.SendWireData();
         parentTE.RemoveWires();
         parentTE.DrawWires();
-        Log.Out("[ORBlock] RebuildParentWires: rebuilt wire data for " + label
+        Log.Out("[LogicRelay] RebuildParentWires: rebuilt wire data for " + label
             + " at " + parent.Position);
     }
 
     /// <summary>
-    /// Applies OR gate metadata (secondParentPosition, mode, primaryParentPosition) from
-    /// ORGateMetadataStore to the given orGate. Consumes and removes the entry from the store.
-    /// Restores the primary parent from the stored position (immune to CheckForNewWires timing).
-    /// Falls back to fallbackParent for old saves that lack a stored primary parent position.
-    /// Also attempts immediate RestoreSecondParent if the target is already in the dict.
+    /// Applies Logic Relay metadata (secondParentPosition, mode, primaryParentPosition) from
+    /// LogicRelayMetadataStore to the given logicRelay. Consumes and removes the entry from
+    /// the store. Restores the primary parent from the stored position (immune to
+    /// CheckForNewWires timing). Falls back to fallbackParent for old saves that lack a
+    /// stored primary parent position. Also attempts immediate RestoreSecondParent if the
+    /// target is already in the dict.
     /// </summary>
-    private static void ApplyMetadata(PowerItemORGate orGate, Vector3i gatePos, PowerItem fallbackParent = null)
+    private static void ApplyMetadata(PowerItemLogicRelay logicRelay, Vector3i gatePos, PowerItem fallbackParent = null)
     {
-        if (ORGateMetadataStore.TryGet(gatePos, out ORGateMetadata meta))
+        if (LogicRelayMetadataStore.TryGet(gatePos, out LogicRelayMetadata meta))
         {
-            orGate.Mode = meta.Mode;
-            orGate.HasSecondParent = meta.HasSecondParent;
-            orGate.SecondParentPosition = meta.SecondParentPosition;
-            ORGateMetadataStore.Remove(gatePos);
+            logicRelay.Mode = meta.Mode;
+            logicRelay.HasSecondParent = meta.HasSecondParent;
+            logicRelay.SecondParentPosition = meta.SecondParentPosition;
+            LogicRelayMetadataStore.Remove(gatePos);
 
             // Restore primary parent from stored position (immune to CheckForNewWires timing)
             if (meta.HasPrimaryParent)
@@ -425,34 +427,34 @@ public class TileEntityPowered_InitializePowerData_Patch
                 PowerItem primaryParent = PowerManager.Instance.GetPowerItemByWorldPos(meta.PrimaryParentPosition);
                 if (primaryParent != null)
                 {
-                    PowerManager.Instance.SetParent(orGate, primaryParent);
+                    PowerManager.Instance.SetParent(logicRelay, primaryParent);
                     RebuildParentWires(primaryParent, "primary parent");
-                    Log.Out("[ORBlock] ApplyMetadata: restored primary parent from stored position at "
+                    Log.Out("[LogicRelay] ApplyMetadata: restored primary parent from stored position at "
                         + meta.PrimaryParentPosition);
                 }
                 else
                 {
-                    Log.Warning("[ORBlock] ApplyMetadata: could not find primary parent at "
+                    Log.Warning("[LogicRelay] ApplyMetadata: could not find primary parent at "
                         + meta.PrimaryParentPosition);
                 }
             }
             else if (fallbackParent != null)
             {
                 // Old save without stored primary parent — use captured oldItem.Parent
-                PowerManager.Instance.SetParent(orGate, fallbackParent);
+                PowerManager.Instance.SetParent(logicRelay, fallbackParent);
                 RebuildParentWires(fallbackParent, "primary parent (fallback)");
-                Log.Out("[ORBlock] ApplyMetadata: restored primary parent from fallback at "
+                Log.Out("[LogicRelay] ApplyMetadata: restored primary parent from fallback at "
                     + fallbackParent.Position);
             }
 
             // Restore second parent
             if (meta.HasSecondParent)
             {
-                orGate.RestoreSecondParent();
-                RebuildParentWires(orGate.SecondParent, "second parent");
+                logicRelay.RestoreSecondParent();
+                RebuildParentWires(logicRelay.SecondParent, "second parent");
             }
 
-            Log.Out("[ORBlock] ApplyMetadata: applied metadata at " + gatePos
+            Log.Out("[LogicRelay] ApplyMetadata: applied metadata at " + gatePos
                 + " mode=" + meta.Mode
                 + " hasSecondParent=" + meta.HasSecondParent
                 + " hasPrimaryParent=" + meta.HasPrimaryParent);
@@ -460,7 +462,7 @@ public class TileEntityPowered_InitializePowerData_Patch
         else if (fallbackParent != null)
         {
             // No metadata at all — just restore the fallback parent
-            PowerManager.Instance.SetParent(orGate, fallbackParent);
+            PowerManager.Instance.SetParent(logicRelay, fallbackParent);
             RebuildParentWires(fallbackParent, "primary parent (no metadata)");
         }
     }

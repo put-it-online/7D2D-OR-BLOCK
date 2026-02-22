@@ -60,7 +60,7 @@ public class Block_OnBlockActivated_Bool_Patch
             block.Properties.Values["IsLogicRelay"] != "true")
             return true;
 
-        Log.Out("[ORBlock] Block_OnBlockActivated_Bool_Patch fired at " + _blockPos);
+        Log.Out("[LogicRelay] Block_OnBlockActivated_Bool_Patch fired at " + _blockPos);
 
         // Let the original method run — it contains the logic that checks
         // HasBlockActivationCommands and opens the radial menu.
@@ -96,7 +96,7 @@ public class BlockPowered_HasBlockActivationCommands_Patch
             block.Properties.Values["IsLogicRelay"] != "true")
             return true;
 
-        Log.Out("[ORBlock] HasBlockActivationCommands fired at " + _blockPos);
+        Log.Out("[LogicRelay] HasBlockActivationCommands fired at " + _blockPos);
         __result = true;
         return false;
     }
@@ -136,7 +136,7 @@ public class BlockPowered_GetBlockActivationCommands_Patch
             block.Properties.Values["IsLogicRelay"] != "true")
             return true;
 
-        Log.Out("[ORBlock] GetBlockActivationCommands fired at " + _blockPos);
+        Log.Out("[LogicRelay] GetBlockActivationCommands fired at " + _blockPos);
 
         bool canPlace = _world.CanPlaceBlockAt(_blockPos,
             _world.GetGameManager().GetPersistentLocalPlayer());
@@ -175,15 +175,15 @@ public class BlockPowered_GetActivationText_Patch
             block.Properties.Values["IsLogicRelay"] != "true")
             return true;
 
-        Log.Out("[ORBlock] GetActivationText fired at " + _blockPos);
+        Log.Out("[LogicRelay] GetActivationText fired at " + _blockPos);
 
         PowerItem powerItem = PowerManager.Instance.GetPowerItemByWorldPos(_blockPos);
-        if (powerItem is PowerItemORGate orGate)
+        if (powerItem is PowerItemLogicRelay logicRelay)
         {
-            string mode   = orGate.Mode == GateMode.OR ? "OR" : "AND";
-            string input1 = orGate.Parent       != null ? "Connected" : "Empty";
-            string input2 = orGate.SecondParent != null ? "Connected" : "Empty";
-            string output = orGate.IsOutputPowered() ? "ON" : "OFF";
+            string mode   = logicRelay.Mode == LogicRelayMode.OR ? "OR" : "AND";
+            string input1 = logicRelay.Parent       != null ? "Connected" : "Empty";
+            string input2 = logicRelay.SecondParent != null ? "Connected" : "Empty";
+            string output = logicRelay.IsOutputPowered() ? "ON" : "OFF";
             __result = string.Format(
                 "Logic Relay [Mode: {0}] [Input 1: {1}] [Input 2: {2}] [Output: {3}]",
                 mode, input1, input2, output);
@@ -203,7 +203,7 @@ public class BlockPowered_GetActivationText_Patch
 /// <summary>
 /// Handles a command selected from the radial menu.
 /// "toggle_mode" switches between OR and AND logic.
-/// "disconnect"  removes all wired inputs from the gate.
+/// "disconnect"  removes all wired inputs from the Logic Relay.
 /// </summary>
 [HarmonyPatch(typeof(BlockPowered))]
 [HarmonyPatch("OnBlockActivated")]
@@ -225,10 +225,10 @@ public class BlockPowered_OnBlockActivated_Command_Patch
             block.Properties.Values["IsLogicRelay"] != "true")
             return true;
 
-        Log.Out("[ORBlock] OnBlockActivated command='" + _commandName + "' at " + _blockPos);
+        Log.Out("[LogicRelay] OnBlockActivated command='" + _commandName + "' at " + _blockPos);
 
         PowerItem powerItem = PowerManager.Instance.GetPowerItemByWorldPos(_blockPos);
-        if (!(powerItem is PowerItemORGate orGate))
+        if (!(powerItem is PowerItemLogicRelay logicRelay))
         {
             __result = false;
             return false;
@@ -237,14 +237,14 @@ public class BlockPowered_OnBlockActivated_Command_Patch
         switch (_commandName)
         {
             case "toggle_mode":
-                orGate.ToggleMode();
-                string modeName = orGate.Mode == GateMode.OR ? "OR" : "AND";
+                logicRelay.ToggleMode();
+                string modeName = logicRelay.Mode == LogicRelayMode.OR ? "OR" : "AND";
                 GameManager.ShowTooltip(_player, "Logic Relay: Mode set to " + modeName);
                 __result = true;
                 return false;
 
             case "disconnect":
-                orGate.DisconnectAllInputs();
+                logicRelay.DisconnectAllInputs();
                 GameManager.ShowTooltip(_player, "Logic Relay: All inputs disconnected");
                 __result = true;
                 return false;
