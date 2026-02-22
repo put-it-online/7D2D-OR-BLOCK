@@ -20,33 +20,98 @@ public class PowerItemORGate : PowerConsumer
     public GateMode Mode { get; set; } = GateMode.OR;
 
     /// <summary>
-    /// Controls whether HandlePowerReceived propagates power to children.
-    /// The base PowerItem.HandlePowerReceived checks PowerChildren() before
-    /// recursing into the Children list. By returning IsOutputPowered() here,
-    /// AND mode correctly blocks child power when only one input is powered.
+    /// Returns true if a given parent input is "on" for gate logic purposes.
+    ///
+    /// For PowerTrigger parents (motion detectors, switches, pressure plates, etc.),
+    /// we check IsActive rather than IsPowered. IsPowered only means "electricity
+    /// is flowing through the device from the generator" — it is true for ALL devices
+    /// downstream of an active generator, regardless of whether the sensor has fired.
+    /// IsActive correctly reflects whether the trigger has been activated.
+    ///
+    /// For non-trigger parents (generators, relays, etc.), IsPowered is the right check.
     /// </summary>
-    public override bool PowerChildren()
+    private static bool IsParentActive(PowerItem parent)
     {
-        return IsOutputPowered();
+        if (parent == null)
+            return false;
+        if (parent is PowerTrigger trigger)
+            return trigger.IsActive;
+        return parent.IsPowered;
     }
 
     /// <summary>
     /// Check if the gate output should be powered, based on current mode.
+    /// Uses IsActive for trigger-type parents so that AND mode correctly requires
+    /// BOTH triggers to be active, not just both receiving electricity.
     /// </summary>
     public bool IsOutputPowered()
     {
-        bool parent1Powered = (Parent != null && Parent.IsPowered);
-        bool parent2Powered = (SecondParent != null && SecondParent.IsPowered);
+        bool parent1Active = IsParentActive(Parent);
+        bool parent2Active = IsParentActive(SecondParent);
 
         if (Mode == GateMode.AND)
         {
-            // AND: both inputs must be connected AND powered
-            return (Parent != null && Parent.IsPowered)
-                && (SecondParent != null && SecondParent.IsPowered);
+            // AND: both inputs must be connected AND active
+            return Parent != null && parent1Active
+                && SecondParent != null && parent2Active;
         }
 
-        // OR: either input powered
-        return parent1Powered || parent2Powered;
+        // OR: either input active
+        return parent1Active || parent2Active;
+    }
+
+    /// <summary>
+    /// Override HandlePowerUpdate to apply gate logic directly.
+    ///
+    /// The base PowerConsumer.HandlePowerUpdate does:
+    ///   bool flag = isPowered && isOn;
+    ///   TileEntity.Activate(flag);
+    ///
+    /// The isPowered FIELD is always true when any generator supplies power through
+    /// this node — it does NOT reflect whether both trigger inputs are active.
+    /// We must override this entirely to use IsOutputPowered() as the activation flag.
+    ///
+    /// We also must control child propagation: in AND mode, children should only
+    /// receive HandlePowerUpdate(true) when the gate output is on.
+    /// </summary>
+    public override void HandlePowerUpdate(bool isOn)
+    {
+        bool outputOn = isOn && IsOutputPowered();
+
+        Log.Out("[ORBlock] HandlePowerUpdate: mode=" + Mode
+            + " parent1Active=" + IsParentActive(Parent)
+            + " parent2Active=" + IsParentActive(SecondParent)
+            + " isPowered=" + isPowered
+            + " isOn=" + isOn
+            + " outputOn=" + outputOn);
+
+        if (TileEntity != null)
+        {
+            TileEntity.Activate(outputOn);
+            if (outputOn && lastActivate != outputOn)
+            {
+                TileEntity.ActivateOnce();
+            }
+            TileEntity.SetModified();
+        }
+        lastActivate = outputOn;
+
+        // Propagate to children with the gate output state
+        for (int i = 0; i < Children.Count; i++)
+        {
+            Children[i].HandlePowerUpdate(outputOn);
+        }
+    }
+
+    /// <summary>
+    /// Controls whether HandlePowerReceived propagates power to children.
+    /// The base PowerItem.HandlePowerReceived checks PowerChildren() before
+    /// recursing into the Children list. By returning IsOutputPowered() here,
+    /// AND mode correctly blocks child power-flow when only one input is powered.
+    /// </summary>
+    public override bool PowerChildren()
+    {
+        return IsOutputPowered();
     }
 
     /// <summary>
