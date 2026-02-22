@@ -1,3 +1,5 @@
 Key,File,Type,UsedInMainMenu,NoTranslate,english
 LogicRelayBlock,blocks,Block,false,false,Logic Relay
 LogicRelayBlockDesc,blocks,Block,false,false,"Logic relay with 2 inputs. Supports OR mode (either input) and AND mode (both inputs required). Use the activation menu to toggle mode or disconnect."
+blockcommand_toggle_mode,UI,Radial blockcommand,false,false,Toggle Mode
+blockcommand_disconnect,UI,Radial blockcommand,false,false,Disconnect

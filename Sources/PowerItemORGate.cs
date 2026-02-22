@@ -20,6 +20,17 @@ public class PowerItemORGate : PowerConsumer
     public GateMode Mode { get; set; } = GateMode.OR;
 
     /// <summary>
+    /// Controls whether HandlePowerReceived propagates power to children.
+    /// The base PowerItem.HandlePowerReceived checks PowerChildren() before
+    /// recursing into the Children list. By returning IsOutputPowered() here,
+    /// AND mode correctly blocks child power when only one input is powered.
+    /// </summary>
+    public override bool PowerChildren()
+    {
+        return IsOutputPowered();
+    }
+
+    /// <summary>
     /// Check if the gate output should be powered, based on current mode.
     /// </summary>
     public bool IsOutputPowered()
@@ -82,14 +93,47 @@ public class PowerItemORGate : PowerConsumer
 
     /// <summary>
     /// Disconnect ALL inputs (both parents). Called from the block activation menu.
+    /// Mirrors the vanilla RemoveParentWithWiringTool pattern: updates the power
+    /// graph, rebuilds wire data, sends network packets, and redraws wires.
     /// </summary>
     public void DisconnectAllInputs()
     {
+        // Capture parent TileEntity refs before disconnect nullifies them
+        TileEntityPowered firstParentTE = Parent != null ? Parent.TileEntity : null;
+        TileEntityPowered secondParentTE = SecondParent != null ? SecondParent.TileEntity : null;
+
+        // Disconnect second parent (custom graph cleanup)
         RemoveSecondParent();
 
+        // Disconnect first parent (vanilla graph cleanup: Children.Remove,
+        // Parent = null, Circuits.Add, HandleDisconnect, SendHasLocalChangesToRoot)
         if (Parent != null)
         {
             PowerManager.Instance.RemoveParent(this);
+        }
+
+        // Full wire visual/network cleanup for both parents.
+        // RemoveParent partially handles the first parent but misses SendWireData
+        // and RemoveWires. We redo the full sequence for both parents.
+        if (firstParentTE != null)
+        {
+            firstParentTE.CreateWireDataFromPowerItem();
+            firstParentTE.SendWireData();
+            firstParentTE.RemoveWires();
+            firstParentTE.DrawWires();
+        }
+        if (secondParentTE != null)
+        {
+            secondParentTE.CreateWireDataFromPowerItem();
+            secondParentTE.SendWireData();
+            secondParentTE.RemoveWires();
+            secondParentTE.DrawWires();
+        }
+
+        // Mark our own tile entity as modified so the disconnect persists on save
+        if (TileEntity != null)
+        {
+            TileEntity.SetModified();
         }
     }
 

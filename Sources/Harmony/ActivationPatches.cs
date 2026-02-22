@@ -104,12 +104,13 @@ public class BlockPowered_HasBlockActivationCommands_Patch
 
 // ---------------------------------------------------------------------------
 // 3. GetBlockActivationCommands — patch on BlockPowered (which overrides it).
-//    Returns toggle_mode and disconnect commands, enabled when the player owns
-//    the land claim.
+//    Returns toggle_mode and disconnect commands, enabled when the player can
+//    place blocks at the target position (mirrors BlockTimerRelay pattern).
 // ---------------------------------------------------------------------------
 /// <summary>
 /// Returns the activation commands shown in the radial menu.
-/// Commands are enabled only when the player owns the land claim.
+/// Commands are enabled when the player can place blocks at the position
+/// (same check as vanilla BlockTimerRelay — blocked only in trader areas).
 /// </summary>
 [HarmonyPatch(typeof(BlockPowered))]
 [HarmonyPatch("GetBlockActivationCommands")]
@@ -118,7 +119,7 @@ public class BlockPowered_GetBlockActivationCommands_Patch
     static readonly BlockActivationCommand[] relayCmds = new BlockActivationCommand[]
     {
         new BlockActivationCommand("toggle_mode", "electric_switch", false, false),
-        new BlockActivationCommand("disconnect",  "electric_disconnect", false, false)
+        new BlockActivationCommand("disconnect",  "x", false, false)
     };
 
     static bool Prefix(
@@ -137,11 +138,11 @@ public class BlockPowered_GetBlockActivationCommands_Patch
 
         Log.Out("[ORBlock] GetBlockActivationCommands fired at " + _blockPos);
 
-        bool isUsable = _world.IsMyLandProtectedBlock(_blockPos,
+        bool canPlace = _world.CanPlaceBlockAt(_blockPos,
             _world.GetGameManager().GetPersistentLocalPlayer());
 
-        relayCmds[0].enabled = isUsable;
-        relayCmds[1].enabled = isUsable;
+        relayCmds[0].enabled = canPlace;
+        relayCmds[1].enabled = canPlace;
 
         __result = relayCmds;
         return false;
