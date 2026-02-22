@@ -300,6 +300,7 @@ public class TileEntityPowered_InitializePowerData_Patch
             PowerManager.Instance.SetParent(orGate, originalParent);
             Log.Out("[ORBlock] InitializePowerData: restored primary parent at "
                 + originalParent.Position + " for gate at " + gatePos);
+            RebuildParentWires(originalParent, "primary parent");
         }
 
         // Step 5: Re-attach children that were under the old item.
@@ -355,6 +356,24 @@ public class TileEntityPowered_InitializePowerData_Patch
     }
 
     /// <summary>
+    /// Rebuilds wire visuals on a parent's TileEntity after its Children list changed.
+    /// This ensures the visual wire from parent to gate is drawn after load.
+    /// </summary>
+    private static void RebuildParentWires(PowerItem parent, string label)
+    {
+        if (parent == null || parent.TileEntity == null)
+            return;
+
+        TileEntityPowered parentTE = parent.TileEntity;
+        parentTE.CreateWireDataFromPowerItem();
+        parentTE.SendWireData();
+        parentTE.RemoveWires();
+        parentTE.DrawWires();
+        Log.Out("[ORBlock] RebuildParentWires: rebuilt wire data for " + label
+            + " at " + parent.Position);
+    }
+
+    /// <summary>
     /// Applies OR gate metadata (secondParentPosition, mode) from ORGateMetadataStore
     /// to the given orGate. Consumes and removes the entry from the store.
     /// Also attempts immediate RestoreSecondParent if the target is already in the dict.
@@ -372,6 +391,7 @@ public class TileEntityPowered_InitializePowerData_Patch
             if (meta.HasSecondParent)
             {
                 orGate.RestoreSecondParent();
+                RebuildParentWires(orGate.SecondParent, "second parent");
             }
 
             Log.Out("[ORBlock] ApplyMetadata: applied metadata at " + gatePos
