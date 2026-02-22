@@ -36,6 +36,34 @@ All activation patches have `Log.Out("[ORBlock] ...")` debug lines. After making
 
 The user specifically identified this vanilla block as having a working interaction menu. Use it as the gold standard for how activation menus work. Its block definition is in `C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die\Data\Config\blocks.xml` and its class can be decompiled from `Assembly-CSharp.dll` using `ilspycmd`.
 
+## Do NOT write extra bytes to power.dat
+
+`PowerItemORGate.write()` and `read()` must call ONLY `base.write()`/`base.read()` with no extra bytes. The gate appears under both parents' Children lists in power.dat. The second occurrence is deserialized as a plain `PowerConsumer`, which only reads base fields — any extra bytes corrupt the stream and break every power item loaded afterwards (caused NullReferenceException on motion detectors). OR gate metadata (secondParentPosition, mode) is persisted via TileEntity chunk data instead (see `TileEntityPatches.cs`).
+
+## IsPowered vs IsActive for triggers
+
+For `PowerTrigger` parents (motion detectors, switches, pressure plates), `IsPowered` only means "electricity flows from the generator" — always true for all devices downstream of a running generator. `IsActive` means "the sensor has actually triggered". Use `IsParentActive()` helper which checks the correct property based on parent type.
+
+## The HandlePowerUpdate override is critical
+
+`PowerItemORGate` directly overrides `HandlePowerUpdate(bool isOn)` instead of using Harmony patches. This is necessary because:
+1. The base `PowerConsumer.HandlePowerUpdate` reads the `isPowered` FIELD (not the IsPowered property), bypassing our Harmony patch on `get_IsPowered`
+2. Virtual dispatch ensures our override is called directly, avoiding any Harmony interception issues
+3. Previous attempts to fix AND mode via Harmony prefix on `PowerConsumer.HandlePowerUpdate` failed
+
+## Save/load architecture (dual persistence)
+
+OR gate data is split across two systems — read `docs/save-load-investigation.md` for full details:
+- **power.dat**: Stores vanilla power graph (nodes, parent links). Gate is plain PowerConsumer here.
+- **TileEntity chunk data**: Stores OR gate metadata (secondParentPosition, mode) via our write/read patches.
+- **InitializePowerData**: Upgrades PowerConsumer to PowerItemORGate when chunk loads.
+
+**KNOWN BUG**: Connection 1 (primary parent) is lost on save/reload. The upgrade in InitializePowerData creates a new PowerItemORGate but does not restore the primary parent link. See `docs/save-load-investigation.md` for analysis and proposed fixes.
+
+## Valid radial menu icon names
+
+Only these icons exist in the UIAtlas: `campfire`, `coin`, `door`, `dummy`, `electric_switch`, `frames`, `hand`, `keypad`, `lock`, `map_cursor`, `pen`, `report`, `search`, `tool`, `unlock`, `vending`, `wrench`, `x`. Using an invalid name causes the radial entry to render as invisible.
+
 ## Game DLL location
 
 `C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die\7DaysToDie_Data\Managed\Assembly-CSharp.dll`
