@@ -1,12 +1,23 @@
 #!/bin/bash
 set -e
 
+# Locate dotnet — prefer PATH, fall back to the known Windows install location.
+if command -v dotnet &>/dev/null; then
+    DOTNET=dotnet
+elif [ -x "/c/Program Files/dotnet/dotnet.exe" ]; then
+    DOTNET="/c/Program Files/dotnet/dotnet.exe"
+else
+    echo "ERROR: dotnet not found. Add it to PATH or install it from https://dot.net"
+    exit 1
+fi
+
 echo "Building ORBlock mod..."
-dotnet restore ORBlock.csproj --source https://api.nuget.org/v3/index.json
-dotnet build ORBlock.csproj -c Release --no-restore
+"$DOTNET" restore ORBlock.csproj --source https://api.nuget.org/v3/index.json
+"$DOTNET" build ORBlock.csproj -c Release --no-restore
 
 # Copy compiled DLL to mod root (where 7D2D expects it)
 cp bin/ORBlock.dll ./ORBlock.dll
+echo "DLL copied to mod root."
 
 # Verify 0_TFP_Harmony is in Mods/ — it provides 0Harmony.dll at runtime.
 # DO NOT copy 0Harmony.dll into this mod folder; that causes a version conflict.
