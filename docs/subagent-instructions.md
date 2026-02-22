@@ -6,11 +6,11 @@ Critical things that previous subagents got wrong or forgot. Read this before ma
 
 **ALWAYS use `bash build.sh`** to build the mod. Do NOT run `dotnet build` directly.
 
-The build outputs to `bin/ORBlock.dll` but the game loads from the mod root `ORBlock.dll`. The `build.sh` script handles the copy step. Previous subagents ran `dotnet build` directly, skipping the copy — the game loaded a stale DLL and none of the code changes took effect. Multiple debugging sessions were wasted on this.
+The build outputs to `bin/LogicRelay.dll` but the game loads from the mod root `LogicRelay.dll`. The `build.sh` script handles the copy step. Previous subagents ran `dotnet build` directly, skipping the copy — the game loaded a stale DLL and none of the code changes took effect. Multiple debugging sessions were wasted on this.
 
 ## Patch registration
 
-`ORBlockMod.cs` uses `harmony.PatchAll()` to discover all `[HarmonyPatch]` classes automatically. A previous subagent replaced this with an explicit list of patch classes but only listed the activation patches — completely omitting the TileEntity and PowerManager patches. This silently broke the entire mod. If you change the patch registration approach, make sure ALL patch classes from ALL files are included.
+`LogicRelayMod.cs` uses `harmony.PatchAll()` to discover all `[HarmonyPatch]` classes automatically. A previous subagent replaced this with an explicit list of patch classes but only listed the activation patches — completely omitting the TileEntity and PowerManager patches. This silently broke the entire mod. If you change the patch registration approach, make sure ALL patch classes from ALL files are included.
 
 Patch classes exist in:
 - `Sources/Harmony/ActivationPatches.cs`
@@ -30,7 +30,7 @@ A previous subagent set `__result = false; return false;` in the `OnBlockActivat
 
 ## Verify changes in-game logs
 
-All activation patches have `Log.Out("[ORBlock] ...")` debug lines. After making changes, tell the user to check the game log for these lines to confirm patches are firing. The log file is typically at `%APPDATA%/7DaysToDie/output_log.txt` or visible in the game's F1 console.
+All activation patches have `Log.Out("[LogicRelay] ...")` debug lines. After making changes, tell the user to check the game log for these lines to confirm patches are firing. The log file is typically at `%APPDATA%/7DaysToDie/output_log.txt` or visible in the game's F1 console.
 
 ## The electrictimerrelay is the reference block
 
@@ -38,7 +38,7 @@ The user specifically identified this vanilla block as having a working interact
 
 ## Do NOT write extra bytes to power.dat
 
-`PowerItemORGate.write()` and `read()` must call ONLY `base.write()`/`base.read()` with no extra bytes. The gate appears under both parents' Children lists in power.dat. The second occurrence is deserialized as a plain `PowerConsumer`, which only reads base fields — any extra bytes corrupt the stream and break every power item loaded afterwards (caused NullReferenceException on motion detectors). OR gate metadata (secondParentPosition, mode) is persisted via TileEntity chunk data instead (see `TileEntityPatches.cs`).
+`PowerItemLogicRelay.write()` and `read()` must call ONLY `base.write()`/`base.read()` with no extra bytes. The Logic Relay appears under both parents' Children lists in power.dat. The second occurrence is deserialized as a plain `PowerConsumer`, which only reads base fields — any extra bytes corrupt the stream and break every power item loaded afterwards (caused NullReferenceException on motion detectors). Logic Relay metadata (secondParentPosition, primaryParentPosition, mode) is persisted via TileEntity chunk data instead (see `TileEntityPatches.cs`).
 
 ## IsPowered vs IsActive for triggers
 
@@ -46,19 +46,17 @@ For `PowerTrigger` parents (motion detectors, switches, pressure plates), `IsPow
 
 ## The HandlePowerUpdate override is critical
 
-`PowerItemORGate` directly overrides `HandlePowerUpdate(bool isOn)` instead of using Harmony patches. This is necessary because:
+`PowerItemLogicRelay` directly overrides `HandlePowerUpdate(bool isOn)` instead of using Harmony patches. This is necessary because:
 1. The base `PowerConsumer.HandlePowerUpdate` reads the `isPowered` FIELD (not the IsPowered property), bypassing our Harmony patch on `get_IsPowered`
 2. Virtual dispatch ensures our override is called directly, avoiding any Harmony interception issues
 3. Previous attempts to fix AND mode via Harmony prefix on `PowerConsumer.HandlePowerUpdate` failed
 
 ## Save/load architecture (dual persistence)
 
-OR gate data is split across two systems — read `docs/save-load-investigation.md` for full details:
-- **power.dat**: Stores vanilla power graph (nodes, parent links). Gate is plain PowerConsumer here.
-- **TileEntity chunk data**: Stores OR gate metadata (secondParentPosition, mode) via our write/read patches.
-- **InitializePowerData**: Upgrades PowerConsumer to PowerItemORGate when chunk loads.
-
-**KNOWN BUG**: Connection 1 (primary parent) is lost on save/reload. The upgrade in InitializePowerData creates a new PowerItemORGate but does not restore the primary parent link. See `docs/save-load-investigation.md` for analysis and proposed fixes.
+Logic Relay data is split across two systems — read `docs/save-load-investigation.md` for full details:
+- **power.dat**: Stores vanilla power graph (nodes, parent links). Logic Relay is plain PowerConsumer here.
+- **TileEntity chunk data**: Stores Logic Relay metadata (primaryParentPosition, secondParentPosition, mode) via our write/read patches.
+- **InitializePowerData**: Upgrades PowerConsumer to PowerItemLogicRelay when chunk loads. Restores both parent connections from stored positions in chunk metadata (immune to CheckForNewWires timing).
 
 ## Valid radial menu icon names
 
