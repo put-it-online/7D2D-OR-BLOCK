@@ -2,7 +2,6 @@
     <append xpath="/blocks">
         <block name="LogicRelayBlock">
             <property name="Extends" value="electricwirerelay" />
-            <property name="Class" value="LogicRelay" />
             <property name="CreativeMode" value="Player" />
             <property name="CustomIcon" value="electricwirerelay" />
             <property name="DescriptionKey" value="LogicRelayBlockDesc" />
