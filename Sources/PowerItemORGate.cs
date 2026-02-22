@@ -1,6 +1,12 @@
 using System.IO;
 using UnityEngine;
 
+public enum GateMode : byte
+{
+    OR = 0,
+    AND = 1
+}
+
 public class PowerItemORGate : PowerConsumer
 {
     // The second input connection (vanilla only supports one parent)
@@ -10,14 +16,35 @@ public class PowerItemORGate : PowerConsumer
     private Vector3i secondParentPosition = Vector3i.zero;
     private bool hasSecondParent = false;
 
+    // Gate mode: OR (default) or AND
+    public GateMode Mode { get; set; } = GateMode.OR;
+
     /// <summary>
-    /// Check if either input is powered. This is the OR gate logic.
+    /// Check if the gate output should be powered, based on current mode.
     /// </summary>
-    public bool IsEitherInputPowered()
+    public bool IsOutputPowered()
     {
         bool parent1Powered = (Parent != null && Parent.IsPowered);
         bool parent2Powered = (SecondParent != null && SecondParent.IsPowered);
+
+        if (Mode == GateMode.AND)
+        {
+            // AND: both inputs must be connected AND powered
+            return (Parent != null && Parent.IsPowered)
+                && (SecondParent != null && SecondParent.IsPowered);
+        }
+
+        // OR: either input powered
         return parent1Powered || parent2Powered;
+    }
+
+    /// <summary>
+    /// Toggle between OR and AND mode.
+    /// </summary>
+    public void ToggleMode()
+    {
+        Mode = (Mode == GateMode.OR) ? GateMode.AND : GateMode.OR;
+        SendHasLocalChangesToRoot();
     }
 
     /// <summary>
@@ -42,7 +69,6 @@ public class PowerItemORGate : PowerConsumer
     {
         if (SecondParent == null) return;
 
-        // Remove ourselves from the second parent's children if we were added
         if (SecondParent.Children.Contains(this))
         {
             SecondParent.Children.Remove(this);
@@ -55,14 +81,12 @@ public class PowerItemORGate : PowerConsumer
     }
 
     /// <summary>
-    /// Disconnect ALL inputs (both parents). Called from the disconnect UI button.
+    /// Disconnect ALL inputs (both parents). Called from the block activation menu.
     /// </summary>
     public void DisconnectAllInputs()
     {
-        // Remove second parent first
         RemoveSecondParent();
 
-        // Remove primary parent via the standard power manager
         if (Parent != null)
         {
             PowerManager.Instance.RemoveParent(this);
@@ -82,6 +106,7 @@ public class PowerItemORGate : PowerConsumer
             _bw.Write(secondParentPosition.y);
             _bw.Write(secondParentPosition.z);
         }
+        _bw.Write((byte)Mode);
     }
 
     /// <summary>
@@ -98,11 +123,19 @@ public class PowerItemORGate : PowerConsumer
             int z = _br.ReadInt32();
             secondParentPosition = new Vector3i(x, y, z);
         }
+        // Read gate mode (defaults to OR if not present for backwards compat)
+        if (_br.BaseStream.Position < _br.BaseStream.Length)
+        {
+            Mode = (GateMode)_br.ReadByte();
+        }
+        else
+        {
+            Mode = GateMode.OR;
+        }
     }
 
     /// <summary>
     /// Called after all power items are loaded to restore the second parent reference.
-    /// Must be called from a Harmony postfix on the load process.
     /// </summary>
     public void RestoreSecondParent()
     {
@@ -111,7 +144,6 @@ public class PowerItemORGate : PowerConsumer
         if (item != null)
         {
             SecondParent = item;
-            // Add ourselves as a child of the second parent for wire drawing
             if (!item.Children.Contains(this))
             {
                 item.Children.Add(this);
