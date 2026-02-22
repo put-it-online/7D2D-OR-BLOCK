@@ -2,7 +2,7 @@ using HarmonyLib;
 using System.Collections.Generic;
 
 // ---------------------------------------------------------------------------
-// PowerManager.AddPowerNode — duplicate-key guard (Bug 3 fix)
+// PowerManager.AddPowerNode — duplicate-key guard
 // ---------------------------------------------------------------------------
 /// <summary>
 /// Prevents the ArgumentException "An item with the same key has already been
@@ -16,68 +16,76 @@ using System.Collections.Generic;
 /// PowerManager.AddPowerNode for the OR gate; the first call succeeds, the
 /// second throws because the position key is already in PowerItemDictionary.
 ///
-/// Fix: if the position is already registered we skip the dictionary insert
-/// (the node is already there) but still proceed with SetParent so the second
-/// parent connection is re-established exactly as it was wired.
+/// Fix: if the position is already registered, skip the duplicate AddPowerNode
+/// entirely. Do NOT add the duplicate node to the parent's Children list —
+/// the parent-child links are repaired later by CheckForNewWires() (which runs
+/// in TileEntityPowered.OnReadComplete after InitializePowerData creates the
+/// real PowerItemORGate) and by RestoreSecondParent() in the LoadPowerManager
+/// Postfix below.
+///
+/// Previous behaviour (adding the existing node to the duplicate's parent)
+/// caused phantom entries in parent Children lists, which in turn blocked
+/// CheckForNewWires from re-linking the real gate.
 /// </summary>
 [HarmonyPatch(typeof(PowerManager), "AddPowerNode")]
 public class PowerManager_AddPowerNode_Patch
 {
     // Signature:  void AddPowerNode(PowerItem node, PowerItem parent = null)
     static bool Prefix(
-        PowerManager __instance,
         PowerItem node,
-        PowerItem parent,
-        List<PowerItem> ___Circuits,
         Dictionary<Vector3i, PowerItem> ___PowerItemDictionary)
     {
-        // Only intercept when the position is already registered — this is
-        // exactly the duplicate-child situation caused by two parents each
-        // serialising the OR gate in their Children list.
         if (!___PowerItemDictionary.ContainsKey(node.Position))
             return true; // first occurrence — let the original method run
 
-        // Duplicate occurrence (second parent loading the same OR gate node).
-        // The node is already in the dictionary and in Circuits; we must NOT
-        // add it a second time. We only need to wire up the parent relationship
-        // so the second parent link is restored.
-        Log.Out("[ORBlock] AddPowerNode: skipping duplicate at " + node.Position
-                + " (restoring second-parent link to "
-                + (parent != null ? parent.Position.ToString() : "null") + ")");
-
-        if (parent != null)
-        {
-            PowerItem existing = ___PowerItemDictionary[node.Position];
-
-            // Add the gate to this parent's Children list if not already there.
-            if (!parent.Children.Contains(existing))
-                parent.Children.Add(existing);
-
-            // If the gate already has a primary parent, treat this as the
-            // second parent. The SecondParent reference will be set by
-            // RestoreSecondParent() in the LoadPowerManager Postfix below,
-            // which resolves references from the saved position data.
-        }
-
-        return false; // skip the original AddPowerNode
+        // Duplicate: position already registered.
+        // Skip entirely. Do NOT touch Children lists here — the real links are
+        // established by CheckForNewWires / RestoreSecondParent after load.
+        Log.Out("[ORBlock] AddPowerNode: skipping duplicate at " + node.Position);
+        return false;
     }
 }
 
 // ---------------------------------------------------------------------------
-// PowerManager.SetParent — second-parent support
+// PowerManager.SetParent — second-parent support + phantom-node guard
 // ---------------------------------------------------------------------------
 /// <summary>
-/// Allows a PowerItemORGate to accept a second parent without replacing the
-/// first. Vanilla SetParent would overwrite the existing parent; this prefix
-/// intercepts that for OR-gate nodes and routes to SetSecondParent instead.
+/// Two responsibilities:
+///
+/// 1. Allows a PowerItemORGate to accept a second parent without replacing the
+///    first. Vanilla SetParent would overwrite the existing parent; this prefix
+///    intercepts that for OR-gate nodes and routes to SetSecondParent instead.
+///
+/// 2. Phantom-node guard: during power.dat loading, when a duplicate OR gate
+///    occurrence (pc2) is read by PowerItem.read(), pc2's base.read() calls
+///    SetParent(pc2, primaryParent) BEFORE our AddPowerNode patch can see it.
+///    This inserts pc2 into the primary parent's Children list as a phantom node.
+///    We detect this by checking if the child's position is already registered
+///    in PowerItemDictionary under a DIFFERENT object, and skip the SetParent.
 /// </summary>
 [HarmonyPatch(typeof(PowerManager))]
 [HarmonyPatch("SetParent")]
 [HarmonyPatch(new[] { typeof(PowerItem), typeof(PowerItem) })]
 public class PowerManager_SetParent_Patch
 {
-    static bool Prefix(PowerManager __instance, PowerItem child, PowerItem parent)
+    static bool Prefix(PowerItem child, PowerItem parent)
     {
+        // --- Phantom-node guard ---
+        // If child.Position is already in the dictionary under a DIFFERENT
+        // object, this is a duplicate/phantom node from the second power.dat
+        // read. Skip SetParent to prevent polluting parent's Children list.
+        if (child != null && PowerManager.HasInstance)
+        {
+            PowerItem existing = PowerManager.Instance.GetPowerItemByWorldPos(child.Position);
+            if (existing != null && existing != child)
+            {
+                Log.Out("[ORBlock] SetParent: blocking phantom SetParent for node at "
+                    + child.Position + " (real node already registered)");
+                return false; // skip — would insert a phantom into parent.Children
+            }
+        }
+
+        // --- Second-parent support for PowerItemORGate ---
         if (child is PowerItemORGate orGate)
         {
             // No first parent yet — let vanilla handle it (sets Parent).
@@ -135,9 +143,17 @@ public class PowerItem_IsPowered_Patch
 /// <summary>
 /// After the power save-file has been fully deserialised, iterates every
 /// loaded power item and calls RestoreSecondParent() on any PowerItemORGate.
-/// This resolves the saved second-parent position back to a live reference
-/// (the AddPowerNode duplicate guard ensures the node is already in the
-/// dictionary at this point).
+///
+/// At this point in the game startup sequence, TileEntities have not yet
+/// initialised (chunks load after this). The PowerItemDictionary only contains
+/// plain PowerConsumer objects at this point — actual PowerItemORGate objects
+/// are created later in TileEntityPowered_InitializePowerData_Patch when
+/// each chunk's TileEntities initialise.
+///
+/// Therefore this Postfix serves as a safety net for any gate that was already
+/// upgraded before this runs (e.g. in a future code path), but is not the
+/// primary restore mechanism. The primary mechanism is ApplyMetadata() in
+/// TileEntityPowered_InitializePowerData_Patch.
 /// </summary>
 [HarmonyPatch(typeof(PowerManager))]
 [HarmonyPatch("LoadPowerManager")]
@@ -154,6 +170,10 @@ public class PowerManager_LoadPowerManager_Patch
                 restored++;
             }
         }
-        Log.Out("[ORBlock] LoadPowerManager: restored " + restored + " Logic Relay second-parent connection(s).");
+        if (restored > 0)
+        {
+            Log.Out("[ORBlock] LoadPowerManager: restored " + restored
+                + " Logic Relay second-parent connection(s).");
+        }
     }
 }

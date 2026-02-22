@@ -12,9 +12,13 @@ public class PowerItemORGate : PowerConsumer
     // The second input connection (vanilla only supports one parent)
     public PowerItem SecondParent { get; set; }
 
-    // Position of second parent, used for save/load restoration
-    private Vector3i secondParentPosition = Vector3i.zero;
-    private bool hasSecondParent = false;
+    // Position of second parent, used for save/load restoration.
+    // NOTE: These fields are no longer written to power.dat (which caused stream
+    // corruption because PowerConsumer.read() didn't consume our extra bytes).
+    // They are now persisted via TileEntityPowered chunk data through
+    // TileEntityPowered_ReadWrite_Patch in TileEntityPatches.cs.
+    public Vector3i SecondParentPosition { get; set; } = Vector3i.zero;
+    public bool HasSecondParent { get; set; } = false;
 
     // Gate mode: OR (default) or AND
     public GateMode Mode { get; set; } = GateMode.OR;
@@ -133,8 +137,8 @@ public class PowerItemORGate : PowerConsumer
             RemoveSecondParent();
         }
         SecondParent = parent;
-        hasSecondParent = true;
-        secondParentPosition = parent.Position;
+        HasSecondParent = true;
+        SecondParentPosition = parent.Position;
         SendHasLocalChangesToRoot();
     }
 
@@ -151,8 +155,8 @@ public class PowerItemORGate : PowerConsumer
         }
 
         SecondParent = null;
-        hasSecondParent = false;
-        secondParentPosition = Vector3i.zero;
+        HasSecondParent = false;
+        SecondParentPosition = Vector3i.zero;
         SendHasLocalChangesToRoot();
     }
 
@@ -203,53 +207,54 @@ public class PowerItemORGate : PowerConsumer
     }
 
     /// <summary>
-    /// Serialize: write our extra data after the base class data.
+    /// Serialize to power.dat.
+    ///
+    /// IMPORTANT: We intentionally write ONLY the base PowerConsumer data here.
+    /// Do NOT write any extra bytes (secondParentPosition, mode) after base.write().
+    ///
+    /// Root cause of the NullReferenceException crash (fixed here):
+    ///   When an OR gate is connected to two parents, vanilla PowerItem.write()
+    ///   serialises the gate into BOTH parents' Children lists in power.dat.
+    ///   On load, the second occurrence is read by CreateItem(Consumer) which
+    ///   creates a plain PowerConsumer. PowerConsumer.read() only reads base bytes
+    ///   and returns — leaving any extra bytes we wrote unconsumed in the stream.
+    ///   Those stale bytes are then misread as the NEXT item's fields, corrupting
+    ///   every power item loaded afterwards (including the motion detectors).
+    ///   Specifically, the extra mode byte (0=OR, 1=AND) was misread as
+    ///   PowerTrigger.TriggerType, making the motion detector appear to be a
+    ///   PressurePlate instead of a Motion sensor. The MotionSensorController
+    ///   then called set_IsTriggered, which cast PowerItem to PowerPressurePlate,
+    ///   got null, and threw a NullReferenceException every frame.
+    ///
+    /// The OR gate metadata (secondParentPosition, mode) is now persisted
+    /// exclusively through TileEntityPowered chunk data via
+    /// TileEntityPowered_ReadWrite_Patch in TileEntityPatches.cs.
     /// </summary>
     public override void write(BinaryWriter _bw)
     {
         base.write(_bw);
-        _bw.Write(hasSecondParent);
-        if (hasSecondParent)
-        {
-            _bw.Write(secondParentPosition.x);
-            _bw.Write(secondParentPosition.y);
-            _bw.Write(secondParentPosition.z);
-        }
-        _bw.Write((byte)Mode);
+        // No extra bytes — see summary above.
     }
 
     /// <summary>
-    /// Deserialize: read our extra data after the base class data.
+    /// Deserialize from power.dat.
+    /// Only reads base PowerConsumer data; extra OR gate data is loaded
+    /// from TileEntity chunk data in TileEntityPowered_ReadWrite_Patch.
     /// </summary>
     public override void read(BinaryReader _br, byte _version)
     {
         base.read(_br, _version);
-        hasSecondParent = _br.ReadBoolean();
-        if (hasSecondParent)
-        {
-            int x = _br.ReadInt32();
-            int y = _br.ReadInt32();
-            int z = _br.ReadInt32();
-            secondParentPosition = new Vector3i(x, y, z);
-        }
-        // Read gate mode (defaults to OR if not present for backwards compat)
-        if (_br.BaseStream.Position < _br.BaseStream.Length)
-        {
-            Mode = (GateMode)_br.ReadByte();
-        }
-        else
-        {
-            Mode = GateMode.OR;
-        }
+        // No extra bytes — extra data comes from TileEntity chunk persistence.
     }
 
     /// <summary>
     /// Called after all power items are loaded to restore the second parent reference.
+    /// Uses the SecondParentPosition that was loaded from TileEntity chunk data.
     /// </summary>
     public void RestoreSecondParent()
     {
-        if (!hasSecondParent) return;
-        PowerItem item = PowerManager.Instance.GetPowerItemByWorldPos(secondParentPosition);
+        if (!HasSecondParent) return;
+        PowerItem item = PowerManager.Instance.GetPowerItemByWorldPos(SecondParentPosition);
         if (item != null)
         {
             SecondParent = item;
@@ -260,9 +265,9 @@ public class PowerItemORGate : PowerConsumer
         }
         else
         {
-            Log.Warning("[ORBlock] Could not restore second parent at " + secondParentPosition);
-            hasSecondParent = false;
-            secondParentPosition = Vector3i.zero;
+            Log.Warning("[ORBlock] Could not restore second parent at " + SecondParentPosition);
+            HasSecondParent = false;
+            SecondParentPosition = Vector3i.zero;
         }
     }
 }
