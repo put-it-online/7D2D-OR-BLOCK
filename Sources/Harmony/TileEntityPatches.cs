@@ -329,16 +329,6 @@ public class TileEntityPowered_InitializePowerData_Patch
 
         PowerManager.Instance.AddPowerNode(orGate);
 
-        // Restore primary parent link that was destroyed by RemovePowerNode.
-        // Must happen before children re-attach so the gate is properly parented.
-        if (originalParent != null)
-        {
-            PowerManager.Instance.SetParent(orGate, originalParent);
-            Log.Out("[ORBlock] InitializePowerData: restored primary parent at "
-                + originalParent.Position + " for gate at " + gatePos);
-            RebuildParentWires(originalParent, "primary parent");
-        }
-
         // Step 5: Re-attach children that were under the old item.
         // RemovePowerNode orphaned them into Circuits. We set orGate as their parent.
         foreach (PowerItem child in childrenToKeep)
@@ -352,8 +342,12 @@ public class TileEntityPowered_InitializePowerData_Patch
             }
         }
 
+        // Rebuild the gate's own wireDataList for child wires (e.g., gate -> speaker)
+        RebuildParentWires(orGate, "gate children");
+
         // Step 6: Apply OR gate metadata (secondParent, mode) from chunk save data.
-        ApplyMetadata(orGate, gatePos);
+        // Pass originalParent as fallback for old saves that lack stored primary parent position.
+        ApplyMetadata(orGate, gatePos, originalParent);
 
         Log.Out("[ORBlock] InitializePowerData: PowerItemORGate created at " + gatePos
             + " mode=" + orGate.Mode
@@ -410,11 +404,13 @@ public class TileEntityPowered_InitializePowerData_Patch
     }
 
     /// <summary>
-    /// Applies OR gate metadata (secondParentPosition, mode) from ORGateMetadataStore
-    /// to the given orGate. Consumes and removes the entry from the store.
+    /// Applies OR gate metadata (secondParentPosition, mode, primaryParentPosition) from
+    /// ORGateMetadataStore to the given orGate. Consumes and removes the entry from the store.
+    /// Restores the primary parent from the stored position (immune to CheckForNewWires timing).
+    /// Falls back to fallbackParent for old saves that lack a stored primary parent position.
     /// Also attempts immediate RestoreSecondParent if the target is already in the dict.
     /// </summary>
-    private static void ApplyMetadata(PowerItemORGate orGate, Vector3i gatePos)
+    private static void ApplyMetadata(PowerItemORGate orGate, Vector3i gatePos, PowerItem fallbackParent = null)
     {
         if (ORGateMetadataStore.TryGet(gatePos, out ORGateMetadata meta))
         {
@@ -423,7 +419,33 @@ public class TileEntityPowered_InitializePowerData_Patch
             orGate.SecondParentPosition = meta.SecondParentPosition;
             ORGateMetadataStore.Remove(gatePos);
 
-            // Attempt immediate restoration if the second parent is already loaded
+            // Restore primary parent from stored position (immune to CheckForNewWires timing)
+            if (meta.HasPrimaryParent)
+            {
+                PowerItem primaryParent = PowerManager.Instance.GetPowerItemByWorldPos(meta.PrimaryParentPosition);
+                if (primaryParent != null)
+                {
+                    PowerManager.Instance.SetParent(orGate, primaryParent);
+                    RebuildParentWires(primaryParent, "primary parent");
+                    Log.Out("[ORBlock] ApplyMetadata: restored primary parent from stored position at "
+                        + meta.PrimaryParentPosition);
+                }
+                else
+                {
+                    Log.Warning("[ORBlock] ApplyMetadata: could not find primary parent at "
+                        + meta.PrimaryParentPosition);
+                }
+            }
+            else if (fallbackParent != null)
+            {
+                // Old save without stored primary parent — use captured oldItem.Parent
+                PowerManager.Instance.SetParent(orGate, fallbackParent);
+                RebuildParentWires(fallbackParent, "primary parent (fallback)");
+                Log.Out("[ORBlock] ApplyMetadata: restored primary parent from fallback at "
+                    + fallbackParent.Position);
+            }
+
+            // Restore second parent
             if (meta.HasSecondParent)
             {
                 orGate.RestoreSecondParent();
@@ -432,7 +454,14 @@ public class TileEntityPowered_InitializePowerData_Patch
 
             Log.Out("[ORBlock] ApplyMetadata: applied metadata at " + gatePos
                 + " mode=" + meta.Mode
-                + " hasSecondParent=" + meta.HasSecondParent);
+                + " hasSecondParent=" + meta.HasSecondParent
+                + " hasPrimaryParent=" + meta.HasPrimaryParent);
+        }
+        else if (fallbackParent != null)
+        {
+            // No metadata at all — just restore the fallback parent
+            PowerManager.Instance.SetParent(orGate, fallbackParent);
+            RebuildParentWires(fallbackParent, "primary parent (no metadata)");
         }
     }
 }
