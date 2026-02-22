@@ -151,17 +151,39 @@ public class TileEntityPowered_Read_Patch
             }
             GateMode mode = (GateMode)_br.ReadByte();
 
+            // New fields — nested try-catch for backward compatibility with old saves
+            bool hasPrimaryParent = false;
+            Vector3i primaryParentPos = Vector3i.zero;
+            try
+            {
+                hasPrimaryParent = _br.ReadBoolean();
+                if (hasPrimaryParent)
+                {
+                    int px = _br.ReadInt32();
+                    int py = _br.ReadInt32();
+                    int pz = _br.ReadInt32();
+                    primaryParentPos = new Vector3i(px, py, pz);
+                }
+            }
+            catch
+            {
+                // Old save without primary parent position — fall back to oldItem.Parent
+            }
+
             Vector3i worldPos = __instance.ToWorldPos();
             ORGateMetadataStore.Store(worldPos, new ORGateMetadata
             {
                 HasSecondParent = hasSecondParent,
                 SecondParentPosition = secondParentPos,
-                Mode = mode
+                Mode = mode,
+                HasPrimaryParent = hasPrimaryParent,
+                PrimaryParentPosition = primaryParentPos
             });
 
             Log.Out("[ORBlock] TileEntityPowered.read: loaded ORGate metadata at "
                 + worldPos
                 + " hasSecondParent=" + hasSecondParent
+                + " hasPrimaryParent=" + hasPrimaryParent
                 + " mode=" + mode);
         }
         catch
