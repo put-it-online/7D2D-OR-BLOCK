@@ -253,6 +253,7 @@ public class TileEntityPowered_InitializePowerData_Patch
 
         PowerItem oldItem = __instance.PowerItem;
         Vector3i gatePos = __instance.ToWorldPos();
+        PowerItem originalParent = oldItem.Parent;  // capture before RemovePowerNode destroys it
 
         Log.Out("[ORBlock] InitializePowerData: upgrading PowerConsumer to PowerItemORGate at "
             + gatePos);
@@ -291,6 +292,15 @@ public class TileEntityPowered_InitializePowerData_Patch
         orGate.TileEntity = __instance;
 
         PowerManager.Instance.AddPowerNode(orGate);
+
+        // Restore primary parent link that was destroyed by RemovePowerNode.
+        // Must happen before children re-attach so the gate is properly parented.
+        if (originalParent != null)
+        {
+            PowerManager.Instance.SetParent(orGate, originalParent);
+            Log.Out("[ORBlock] InitializePowerData: restored primary parent at "
+                + originalParent.Position + " for gate at " + gatePos);
+        }
 
         // Step 5: Re-attach children that were under the old item.
         // RemovePowerNode orphaned them into Circuits. We set orGate as their parent.
