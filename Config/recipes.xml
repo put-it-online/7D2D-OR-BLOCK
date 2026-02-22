@@ -1,0 +1,8 @@
+<configs>
+    <append xpath="/recipes">
+        <recipe name="ORGateBlock" count="1" craft_area="workbench" craft_time="10">
+            <ingredient name="resourceElectricParts" count="3" />
+            <ingredient name="resourceForgedIron" count="2" />
+        </recipe>
+    </append>
+</configs>

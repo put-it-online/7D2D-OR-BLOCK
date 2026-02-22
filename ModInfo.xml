@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xml>
+    <Name value="ORBlock" />
+    <DisplayName value="OR Gate Block" />
+    <Version value="1.0.0" />
+    <Description value="Adds an OR gate electrical block with 2 inputs" />
+    <Author value="wimput" />
+</xml>

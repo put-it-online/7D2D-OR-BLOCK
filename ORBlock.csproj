@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ORBlock</RootNamespace>
+    <AssemblyName>ORBlock</AssemblyName>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>bin/</OutputPath>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!--
+    Set GAME_ROOT to your 7 Days To Die install folder, e.g.:
+    Windows: C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die
+    Or set env var GAME_ROOT before building.
+
+    Harmony is provided by the 0_TFP_Harmony mod (game version 1.x pattern).
+    DO NOT bundle a separate 0Harmony.dll in this mod folder — doing so creates
+    a version conflict because 0_TFP_Harmony loads 0Harmony 2.13.0.0 first and
+    two assemblies with the same name cannot coexist in one AppDomain.
+
+    The 0_TFP_Harmony mod must be present in the Mods/ folder alongside this mod.
+    It ships in OldMods/ and must be copied to Mods/ manually if missing.
+  -->
+  <PropertyGroup>
+    <GameRoot Condition="'$(GAME_ROOT)' == ''">$(MSBuildThisFileDirectory)..\..</GameRoot>
+    <GameRoot Condition="'$(GAME_ROOT)' != ''">$(GAME_ROOT)</GameRoot>
+    <GameManaged>$(GameRoot)\7DaysToDie_Data\Managed</GameManaged>
+    <!-- TFP_Harmony mod folder — must be present in Mods/ at runtime -->
+    <TfpHarmonyMod>$(GameRoot)\Mods\0_TFP_Harmony</TfpHarmonyMod>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameManaged)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!--
+      Reference 0Harmony from the 0_TFP_Harmony mod (version 2.13.0.0).
+      This is the version the game's official Harmony mod provides at runtime.
+      Do NOT set Private=true — 0Harmony.dll must NOT be copied into this mod's
+      output folder. The runtime copy comes from 0_TFP_Harmony loaded first.
+    -->
+    <Reference Include="0Harmony">
+      <HintPath>$(TfpHarmonyMod)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="LogLibrary">
+      <HintPath>$(GameManaged)\LogLibrary.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
