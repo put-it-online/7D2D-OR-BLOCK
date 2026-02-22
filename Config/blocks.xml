@@ -1,16 +1,12 @@
 <configs>
-    <!-- Add the OR Gate block. Extends an existing electrical block for model/behavior base. -->
-    <!-- NOTE: Verify that "electricswitch" exists in your game's blocks.xml. -->
-    <!-- If not, check for similar names like "switchElectric" or "electricRelay" -->
     <append xpath="/blocks">
-        <block name="ORGateBlock">
+        <block name="LogicRelayBlock">
             <property name="Extends" value="electricwirerelay" />
+            <property name="Class" value="LogicRelay" />
             <property name="CreativeMode" value="Player" />
             <property name="CustomIcon" value="electricwirerelay" />
-            <property name="DescriptionKey" value="ORGateBlockDesc" />
-            <!-- Custom property that our C# code checks -->
-            <property name="IsORGate" value="true" />
-            <!-- Power consumption: 0W (it's a logic gate, not a consumer) -->
+            <property name="DescriptionKey" value="LogicRelayBlockDesc" />
+            <property name="IsLogicRelay" value="true" />
             <property name="RequiredPower" value="0" />
         </block>
     </append>

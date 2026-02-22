@@ -1,3 +1,3 @@
 Key,File,Type,UsedInMainMenu,NoTranslate,english
-ORGateBlock,blocks,Block,false,false,OR Gate
-ORGateBlockDesc,blocks,Block,false,false,"Electrical OR gate. Accepts 2 inputs, outputs power if either input is active. Crouch+Activate to disconnect all inputs."
+LogicRelayBlock,blocks,Block,false,false,Logic Relay
+LogicRelayBlockDesc,blocks,Block,false,false,"Logic relay with 2 inputs. Supports OR mode (either input) and AND mode (both inputs required). Use the activation menu to toggle mode or disconnect."
