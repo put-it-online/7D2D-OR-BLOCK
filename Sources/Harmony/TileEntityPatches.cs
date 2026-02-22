@@ -35,6 +35,8 @@ public struct ORGateMetadata
     public bool HasSecondParent;
     public Vector3i SecondParentPosition;
     public GateMode Mode;
+    public bool HasPrimaryParent;
+    public Vector3i PrimaryParentPosition;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +83,17 @@ public class TileEntityPowered_Write_Patch
                 _bw.Write(orGate.SecondParentPosition.z);
             }
             _bw.Write((byte)orGate.Mode);
+
+            // Primary parent position (new field — appended after existing fields)
+            bool hasPrimaryParent = orGate.Parent != null;
+            _bw.Write(hasPrimaryParent);
+            if (hasPrimaryParent)
+            {
+                _bw.Write(orGate.Parent.Position.x);
+                _bw.Write(orGate.Parent.Position.y);
+                _bw.Write(orGate.Parent.Position.z);
+            }
+
             Log.Out("[ORBlock] TileEntityPowered.write: saved ORGate metadata at "
                 + __instance.ToWorldPos()
                 + " hasSecondParent=" + orGate.HasSecondParent
@@ -92,6 +105,7 @@ public class TileEntityPowered_Write_Patch
             // the read side can always consume the same number of bytes.
             _bw.Write(false); // hasSecondParent
             _bw.Write((byte)GateMode.OR); // mode
+            _bw.Write(false); // hasPrimaryParent (new field default)
         }
     }
 }
