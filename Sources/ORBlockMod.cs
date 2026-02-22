@@ -7,6 +7,6 @@ public class ORBlockMod : IModApi
     {
         var harmony = new Harmony("com.wimput.orblock");
         harmony.PatchAll(Assembly.GetExecutingAssembly());
-        Log.Out("[ORBlock] OR Gate Block mod loaded.");
+        Log.Out("[ORBlock] Logic Relay Block mod loaded.");
     }
 }
