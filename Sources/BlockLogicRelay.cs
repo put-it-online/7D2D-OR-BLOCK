@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 public class BlockLogicRelay : BlockPowered
 {
-    private readonly BlockActivationCommand[] cmds = new BlockActivationCommand[]
+    private new readonly BlockActivationCommand[] cmds = new BlockActivationCommand[]
     {
         new BlockActivationCommand("toggle_mode", "electric_switch", false, false),
         new BlockActivationCommand("disconnect", "electric_disconnect", false, false)
